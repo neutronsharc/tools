@@ -4,16 +4,20 @@ GCC = gcc
 ZK_CFLAGS := -I/usr/local/include/zookeeper -DTHREADED
 ZK_LDFLAGS := -L/usr/local/lib -lzookeeper_mt
 
-REDIS_CFLAGS := -I/usr/include/hiredis
-REDIS_LDFLAGS := -L/usr/lib/x86_64-linux-gnu/ -lhiredis
+#REDIS_CFLAGS := -I/usr/include/hiredis
+#REDIS_LDFLAGS := -L/usr/lib/x86_64-linux-gnu/ -lhiredis
 
 CFLAGS := -g $(ZK_CFLAGS) -I/usr/include $(REDIS_CFLAGS)
-LDFLAGS := $(ZK_LDFLAGS) -ljansson $(REDIS_LDFLAGS)
+#LDFLAGS := $(ZK_LDFLAGS) -ljansson $(REDIS_LDFLAGS)
+LDFLAGS := $(ZK_LDFLAGS) $(REDIS_LDFLAGS)
 
 
 .PHONY : all clean
 
-all : zktest redis_test
+all : zktest jsontest
+
+jsontest : json.o parson.o
+	$(GCC) $^ $(LDFLAGS) -o $@
 
 zktest : zktest.o
 	$(GCC) $^ $(LDFLAGS) -o $@
