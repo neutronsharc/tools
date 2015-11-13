@@ -1,5 +1,5 @@
 
-GCC = gcc
+GCC = gcc -std=c99
 
 ZK_CFLAGS := -I/usr/local/include/zookeeper -DTHREADED
 ZK_LDFLAGS := -L/usr/local/lib -lzookeeper_mt

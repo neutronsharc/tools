@@ -1,28 +1,32 @@
-[
+{
+  "pools":  // a list of pools.
+  [
+  // A pool
   {
-    "name" : "pool1",
-    "proxy" : ["192.168.1.200:1223", "192.168.1.200:1224"],
-    "proxy_ports" : [10000, 10001, 10002],
+    "name" : "pool1",  // pool name.
+    "proxy" : ["192.168.1.200", "192.168.1.200"], // proxies that connect to this pool.
+    "proxy_ports" : [10000, 10001, 10002],   // Each proxy listens on these ports.
     "hash" : "fnv1a_64",
     "redis" : true,
     "server_retry_timeout": 2000,
     "server_failure_limit": 1,
-    "shards" : [
+    "shards" : [  // each pool has a list of shards. Each shard has a master and N slaves.
       {
-        "start" : 0,
-        "end" : 9999,
+        "range_start" : 0,
+        "range_end" : 9999,
         "master" :  "host1:30001",
-        "slave" : [ "host1:30002",  "host2:30003"]
+        "slave" : [ "host2:30003"]
       },
       {
-        "start" : 10000,
-        "end" : 99999,
+        "range_start" : 10000,
+        "range_end" : 99999,
         "master" :  "host2:30000",
         "slave" : [ "host1:30003",  "host2:30004"]
       }
     ]
   },
 
+  // Another pool.
   {
     "name" : "pool2",
     "hash": "fnv1a_64",
@@ -31,17 +35,20 @@
     "server_failure_limit": 1,
     "shards" : [
       {
-        "start" : 0,
-        "end" : 9999,
+        "range_start" : 0,
+        "range_end" : 9998,
         "master" :  "host1:30001",
         "slave" : [ "host1:30002",  "host2:30003"]
       },
       {
-        "start" : 10000,
+        "start" : 9999,
         "end" : 99999,
         "master" :  "host2:30000",
         "slave" : [ "host1:30003",  "host2:30004"]
       }
     ]
   }
-]
+  ],
+
+  "author" : "shawn"
+}
