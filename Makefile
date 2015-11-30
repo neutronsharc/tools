@@ -2,7 +2,7 @@
 GCC = gcc -std=c99
 
 ZK_CFLAGS := -I/usr/local/include/zookeeper -DTHREADED
-ZK_LDFLAGS := -L/usr/local/lib -lzookeeper_mt
+ZK_LDFLAGS := -L/usr/local/lib -lzookeeper_mt -lpthread
 
 #REDIS_CFLAGS := -I/usr/include/hiredis
 #REDIS_LDFLAGS := -L/usr/lib/x86_64-linux-gnu/ -lhiredis
