@@ -19,7 +19,7 @@ all : zktest jsontest
 jsontest : json.o parson.o
 	$(GCC) $^ $(LDFLAGS) -o $@
 
-zktest : zktest.o
+zktest : zktest.o zkutil.o
 	$(GCC) $^ $(LDFLAGS) -o $@
 
 redis_test : redis_test.o
