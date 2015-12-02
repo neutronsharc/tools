@@ -45,7 +45,9 @@ int main(int argc, char** argv) {
   }
 
   // 2, create
-  ZKCreate(zkh, path, value, strlen(value), flags);
+  ZKCreate(zkh, path, value, strlen(value), flags | ZOO_EPHEMERAL);
+  sprintf(value, "this is a test value--v2");
+  ZKSet(zkh, path, value, strlen(value));
 
   // 3, read node
   int watch = 1;
