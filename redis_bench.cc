@@ -285,6 +285,7 @@ static void Worker(TaskContext* task) {
   unsigned long tBeginSec = NowInSec();
   tBeginUsec = NowInUsec();
   int objSize = 0;
+  bool last_write_failed = false;
 
   while (NowInSec() - tBeginSec < task->runTimeSeconds) {
     if (task->doWrite) {
@@ -293,10 +294,14 @@ static void Worker(TaskContext* task) {
         ThrottleForQPS(task->writeTargetQPS, tBeginUsec, task->writeOps);
       }
 
-      kid = NextObjectID();
-      sprintf(key, "key-%ld", kid);
-      objSize = ioSizes[kid % ioSizes.size()];
-      memset(buf, kid, objSize);
+      if (!last_write_failed) {
+        kid = NextObjectID();
+        sprintf(key, "key-%ld", kid);
+        objSize = ioSizes[kid % ioSizes.size()];
+        memset(buf, kid, objSize);
+      } else {
+        // if last write is a failure, retry write using the same key
+      }
 
       t1 = NowInUsec();
       ret = WriteObj(task->rctx, key, strlen(key), buf, objSize, expire_time);
@@ -312,9 +317,11 @@ static void Worker(TaskContext* task) {
       task->writeOps++;
       if (ret < 0 ) {
         task->writeFailure++;
+        last_write_failed = true;
       } else {
         task->writeSuccess++;
         task->writeBytes += objSize;
+        last_write_failed = false;
       }
       opcnt++;
 
