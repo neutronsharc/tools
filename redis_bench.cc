@@ -208,6 +208,7 @@ static int ReadObj(redisContext *rctx,
   if (reply) {
     if (reply->str == NULL) {
       ret = 2;
+      printf("read miss, key = %s\n", key);
     } else if (check_data) {
       if (reply->len != expectDataSize) {
         // length mismatch
@@ -248,6 +249,8 @@ static int WriteObj(redisContext* rctx,
                                    key, nkey, data, nbytes);
   if (!reply) {
     //printf("Set obj %s failed\n", key);
+    return -1;
+  } else if (strncmp(reply->str, "OK", 2) != 0) {
     return -1;
   } else {
     freeReplyObject(reply);
@@ -441,13 +444,14 @@ void TimerCallback(union sigval sv) {
   }
 
   printf("In past %d seconds:  %ld reads (%ld failure, %ld miss), "
-         "%ld writes (%ld failure)\n",
+         "%ld writes (%ld failure), latest write # %ld\n",
          timer_cycle_sec,
          tc->stats.reads - last_stats.reads,
          tc->stats.read_failure - last_stats.read_failure,
          tc->stats.read_miss - last_stats.read_miss,
          tc->stats.writes - last_stats.writes,
-         tc->stats.write_failure - last_stats.write_failure);
+         tc->stats.write_failure - last_stats.write_failure,
+         NumberOfObjs());
 
 }
 

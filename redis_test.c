@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
 
   // talk to twemproxy at localhost:22120
   const char *hostname = "localhost";
-  int port = 11010;
+  int port = 8888;
 
   struct timeval timeout = { 1, 500000 }; // 1.5 seconds
   ctx = redisConnectWithTimeout(hostname, port, timeout);
