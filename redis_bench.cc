@@ -17,6 +17,7 @@
 #include <thread>
 #include <typeinfo>
 #include <hiredis.h>
+#include <bsd/stdlib.h>
 
 #include "debug.h"
 #include "recorder.h"
@@ -40,7 +41,8 @@ size_t numberShards = 1;
 
 bool use_user_provide_buf = false;
 bool overwrite_all = false;
-bool check_data = false;
+static bool check_data = false;
+static bool randomize_data = true;
 
 static int redis_server_port = -1;
 static char *redis_server_ip = NULL;
@@ -304,7 +306,12 @@ static void Worker(TaskContext* task) {
         // key starts with proc-id.
         sprintf(key, "%d-key-%ld", procid, kid);
         objSize = ioSizes[kid % ioSizes.size()];
-        memset(buf, kid, objSize);
+        if (randomize_data) {
+          arc4random_buf(buf, objSize);
+        } else {
+          memset(buf, kid, objSize);
+        }
+
       } else {
         // if last write is a failure, retry write using the same key
       }
@@ -626,8 +633,12 @@ int main(int argc, char** argv) {
       sprintf(key, "%d-key-%ld", procid, cnt);
       size_t objsize = ioSizes[cnt % ioSizes.size()];
 
-      memset(tmpbuf, cnt, objsize);
       // TODO: scramble the buf, embed data-size and metadata.
+      if (randomize_data) {
+        arc4random_buf(tmpbuf, objsize);
+      } else {
+        memset(tmpbuf, cnt, objsize);
+      }
 
       WriteObj(tasks[0].rctx, key, strlen(key), tmpbuf, objsize, expire_time);
     }
