@@ -45,6 +45,8 @@ bool check_data = false;
 static int redis_server_port = -1;
 static char *redis_server_ip = NULL;
 
+static uint32_t procid = -1;
+
 // By default don't use exptime.
 uint32_t expire_time = 0;
 
@@ -299,7 +301,8 @@ static void Worker(TaskContext* task) {
 
       if (!last_write_failed) {
         kid = NextObjectID();
-        sprintf(key, "key-%ld", kid);
+        // key starts with proc-id.
+        sprintf(key, "%d-key-%ld", procid, kid);
         objSize = ioSizes[kid % ioSizes.size()];
         memset(buf, kid, objSize);
       } else {
@@ -610,6 +613,8 @@ int main(int argc, char** argv) {
   }
 
 
+  procid = (uint32_t)getpid();
+
   char key[200];
   char tmpbuf[MAX_OBJ_SIZE];
   uint32_t exptime = expire_time;
@@ -618,7 +623,7 @@ int main(int argc, char** argv) {
   if (overwrite_all) {
     printf("===== Step 1: populate data ...\n");
     for (size_t cnt = 0; cnt < initObjNumber; cnt++) {
-      sprintf(key, "key-%ld", cnt);
+      sprintf(key, "%d-key-%ld", procid, cnt);
       size_t objsize = ioSizes[cnt % ioSizes.size()];
 
       memset(tmpbuf, cnt, objsize);
