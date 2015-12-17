@@ -344,7 +344,7 @@ static void Worker(TaskContext* task) {
         ThrottleForQPS(task->readTargetQPS, tBeginUsec, task->readOps);
       }
       kid = GetRandomID();
-      sprintf(key, "key-%ld", kid);
+      sprintf(key, "%d-key-%ld", procid, kid);
       objSize = ioSizes[kid % ioSizes.size()];
       memset(buf, kid, objSize);
 
