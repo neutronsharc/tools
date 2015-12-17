@@ -620,7 +620,7 @@ int main(int argc, char** argv) {
   }
 
 
-  procid = (uint32_t)getpid();
+  procid = (uint32_t)redis_server_port;
 
   char key[200];
   char tmpbuf[MAX_OBJ_SIZE];
