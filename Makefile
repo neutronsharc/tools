@@ -1,7 +1,7 @@
 
 GCC = gcc -std=c99
 
-GXX = g++ -std=c++0x
+GXX = g++ -std=c++0x -g
 
 ZK_CFLAGS := -I/usr/local/include/zookeeper -DTHREADED
 ZK_LDFLAGS := -L/usr/local/lib -lzookeeper_mt -lpthread

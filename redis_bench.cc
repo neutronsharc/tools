@@ -33,19 +33,21 @@ using namespace std;
 int numTasks = 1;
 vector<size_t> ioSizes;
 double writeRatio = 0;
-size_t runTimeSeconds = 0;
+size_t runTimeSeconds = 10;
 size_t initObjNumber = 1000;
 size_t readTargetQPS = 1000;
 size_t writeTargetQPS = 1000;
 size_t numberShards = 1;
 
-bool use_user_provide_buf = false;
 bool overwrite_all = false;
 static bool check_data = false;
 static bool randomize_data = true;
 
 static int redis_server_port = -1;
 static char *redis_server_ip = NULL;
+static string size_str = "4000";
+
+static int mget_batch_size = 1;
 
 static uint32_t procid = -1;
 
@@ -72,7 +74,7 @@ struct TaskContext {
   int id;
 
   // Redis context
-  redisContext *rctx;
+  redisContext *redis_ctx;
 
   // whether this task runs write workload.
   bool doWrite;
@@ -96,13 +98,20 @@ struct TaskContext {
 
   // Number of read performed.
   unsigned long readOps;
+
+  // Total bytes read.
   unsigned long readBytes;
+
+  // In mget mode, multi objs are read in on read op.
+  unsigned long readObjs;
 
   // Target qps for read issued by this worker.
   unsigned long readTargetQPS;
 
   unsigned long readSuccess;
   unsigned long readFailure;
+
+  unsigned long readHit;
   unsigned long readMiss;
 
   // record operation latency in micro-sec.
@@ -196,42 +205,43 @@ static void ThrottleForQPS(long targetQPS,
 // Read (k, v) from Redis.
 //
 // Return value:
-//   0: success,
-//   1: GET failed
-//   2: read miss
-//   3: data size mismatch
-//   4: data corruption
-static int ReadObj(redisContext *rctx,
+//  -1  : failed to read.
+//  -2  : data size mismatch
+//  -3  : data corruption
+//   0  : read miss
+//  > 0 : data size
+static int ReadObj(redisContext *redis_ctx,
                    char* key,
                    int nkey,
                    char* valbuf,
                    int expectDataSize) {
   int ret = 0;
 
-  redisReply *reply = (redisReply *)redisCommand(rctx, "GET %s", key);
-  if (reply) {
-    if (reply->str == NULL) {
-      ret = 2;
-      printf("read miss, key = %s\n", key);
-    } else if (check_data) {
+  redisReply *reply = (redisReply *)redisCommand(redis_ctx, "GET %s", key);
+  if (!reply) {
+    ret = -1;
+  } else if (reply->type != REDIS_REPLY_STRING || reply->str == NULL) {
+    ret = 0;
+    printf("read miss, key = %s\n", key);
+  } else {
+    // Got valid return string.
+    ret = reply->len;
+    if (check_data) {
       if (reply->len != expectDataSize) {
         // length mismatch
-        ret = 3;
+        ret = -2;
       } else if (memcmp(valbuf, reply->str, reply->len) != 0) {
         // data corrupted
-        ret = 4;
+        ret = -3;
       }
     }
-
+  }
+  if (reply) {
     freeReplyObject(reply);
-
-  } else {
-    // "GET" failed.
-    ret = 1;
   }
 
 #if CRASH_ON_FAILURE
-  if (ret != 0) {
+  if (ret < 0) {
     assert(0);
   }
 #endif
@@ -239,27 +249,125 @@ static int ReadObj(redisContext *rctx,
   return ret;
 }
 
+// Do "mget key1 key2 ..." to fetch multiple objs.
+//
+// Return:
+//    < 0 : failure.
+//    >= 0:  number of read hits.
+static int ReadObjs(redisContext *redis_ctx,
+                    std::vector<char*> &keys,
+                    std::vector<int> &keys_len,
+                    std::vector<int> &ret_sizes) {
+  if (keys.size() == 0) {
+    return 0;
+  }
+
+  if (keys.size() == 1) {
+    int ret = ReadObj(redis_ctx, keys[0], keys_len[0], NULL, 0);
+    if (ret > 0) {
+      ret_sizes.push_back(ret);
+      return 1;
+    } else {
+      return ret;
+    }
+  }
+
+  // Prepare mget cmd.
+  string format = "mget";
+
+  for (int i = 0; i < keys.size(); i++) {
+    format.append(" ");
+    format.append(keys[i], keys_len[i]);
+  }
+
+  // Issue request.
+  redisReply *reply = (redisReply *)redisCommand(redis_ctx, format.c_str());
+
+  // Parse reply.
+  int ret = -1;
+  if (!reply) {
+    // cmd failed.
+  } else if (reply->type != REDIS_REPLY_ARRAY) {
+    // no data returned.
+  } else {
+    ret = 0;
+    for (int i = 0; i < reply->elements; i++) {
+      int data_size = 0;
+      if (!reply->element[i]) {
+        // No data for element i.
+        ret_sizes.push_back(0);
+      } else if (reply->element[i]->type == REDIS_REPLY_STRING) {
+        // Got a valid string.
+        // data = reply.element[i]->str,
+        // size = reply.element[i]->len
+        ret_sizes.push_back(reply->element[i]->len);
+        ret++;
+      } else {
+        // A miss.
+        ret_sizes.push_back(0);
+      }
+      if (reply->element[i]) {
+        //freeReplyObject(reply->element[i]);
+      }
+    }
+  }
+
+  if (reply) {
+    freeReplyObject(reply);
+  }
+  return ret;
+}
+
 // Write (k, v) to Redis.
 //
 // Upon success, returns nbytes written.
 // Return -1 otherwise.
-static int WriteObj(redisContext* rctx,
+static int WriteObj(redisContext* redis_ctx,
                     char* key,
                     int nkey,
                     char* data,
                     int nbytes,
                     uint32_t exptime) {
-  redisReply *reply = (redisReply *)redisCommand(rctx, "SET %b %b",
-                                   key, nkey, data, nbytes);
+  redisReply *reply =
+    (redisReply *)redisCommand(redis_ctx, "SET %b %b",
+                               key, nkey, data, nbytes);
+  int ret = -1;
   if (!reply) {
-    //printf("Set obj %s failed\n", key);
-    return -1;
+    // Failure.
   } else if (strncmp(reply->str, "OK", 2) != 0) {
-    return -1;
+    // Upon success, reply->type == REDIS_REPLY_STATUS,
+    // reply->str is "OK".
   } else {
-    freeReplyObject(reply);
-    return nbytes;
+    ret = nbytes;
   }
+  if (reply) {
+    freeReplyObject(reply);
+  }
+  return ret;
+}
+
+static void TryRedisCmd(redisContext* ctx) {
+  char buf[10000];
+  char key1[100];
+  char key2[100];
+  char key3[100];
+
+  sprintf(key1, "key1");
+  sprintf(key2, "key2");
+  sprintf(key3, "no-key3");
+
+  std::vector<char*> keys;
+  std::vector<int> keys_len;
+  std::vector<int> ret_sizes;
+  keys.push_back(key1);
+  // Length includes the trailing null.
+  keys_len.push_back(strlen(key1));
+  keys.push_back(key2);
+  keys_len.push_back(strlen(key2));
+  ReadObjs(ctx, keys, keys_len, ret_sizes);
+
+  ReadObj(ctx, key1, strlen(key1), NULL, 0);
+  ReadObj(ctx, key3, strlen(key3), NULL, 0);
 }
 
 
@@ -268,7 +376,6 @@ static void Worker(TaskContext* task) {
   int bufsize = MAX_OBJ_SIZE;
   char key[200];
   char buf[bufsize];
-  char *user_provide_buf = NULL;
   unsigned long tBeginUsec;
 
   long elapsedMicroSec;
@@ -278,14 +385,6 @@ static void Worker(TaskContext* task) {
            task->runTimeSeconds);
   }
 
-  // User preallocate a page-aligned buf. KV lib will perform zero-copy to
-  // load data directly into this buf.
-  // Use this API for better performance. Make sure you understand what
-  // you are doing.
-  if (use_user_provide_buf) {
-    assert(posix_memalign((void**)&user_provide_buf, 4096, bufsize) == 0);
-  }
-
   int ret;
 
   unsigned long kid, t1, t2, opcnt = 0;
@@ -293,6 +392,13 @@ static void Worker(TaskContext* task) {
   tBeginUsec = NowInUsec();
   int objSize = 0;
   bool last_write_failed = false;
+
+  vector<char*> keys;
+  vector<int> keys_len;
+  vector<int> ret_sizes;
+  for (int i = 0; i < mget_batch_size; i++) {
+    keys.push_back((char*)malloc(200));
+  }
 
   while (NowInSec() - tBeginSec < task->runTimeSeconds) {
     if (task->doWrite) {
@@ -317,7 +423,7 @@ static void Worker(TaskContext* task) {
       }
 
       t1 = NowInUsec();
-      ret = WriteObj(task->rctx, key, strlen(key), buf, objSize, expire_time);
+      ret = WriteObj(task->redis_ctx, key, strlen(key), buf, objSize, expire_time);
       t2 = NowInUsec() - t1;
 
       if (task->writeRec) {
@@ -343,40 +449,49 @@ static void Worker(TaskContext* task) {
       if (task->readOps > 0) {
         ThrottleForQPS(task->readTargetQPS, tBeginUsec, task->readOps);
       }
-      kid = GetRandomID();
-      sprintf(key, "%d-key-%ld", procid, kid);
-      objSize = ioSizes[kid % ioSizes.size()];
-      memset(buf, kid, objSize);
+      keys_len.clear();
+      ret_sizes.clear();
+      for (int i = 0; i < mget_batch_size; i++) {
+        kid = GetRandomID();
+        sprintf(keys[i], "%d-key-%ld", procid, kid);
+        keys_len.push_back((int)strlen(keys[i]));
+      }
 
       t1 = NowInUsec();
-      ret = ReadObj(task->rctx,
-                    key,
-                    strlen(key),
-                    buf,
-                    objSize);
+      //ret = ReadObj(task->redis_ctx,
+      //              key,
+      //              strlen(key),
+      //              buf,
+      //              objSize);
+      ret = ReadObjs(task->redis_ctx, keys, keys_len, ret_sizes);
       t2 = NowInUsec() - t1;
 
-      if (ret == 0 && task->readRec) {
+      if (task->readRec) {
         task->readRec->Add(t2);
       }
       if (t2 > 30000) {
         dbg("read key %s: costs %ld ms\n", key, t2 / 1000);
       }
 
-      task->readOps++;
-      opcnt++;
-      switch (ret) {
-        case 0:
-          task->readSuccess++;
-          task->readBytes += objSize;
-          break;
-        case 2:
-          task->readMiss++;
-          break;
-        default:
-          task->readFailure++;
-          break;
+      //task->readOps++;
+      //opcnt++;
+      // Each obj counts as one read op.
+      task->readOps += mget_batch_size;
+      opcnt += mget_batch_size;
+      task->readObjs += mget_batch_size;
+
+      if (ret >= 0) {
+        task->readSuccess += mget_batch_size;
+        task->readHit += ret;
+        task->readMiss += (mget_batch_size - ret);
+
+        for (int i : ret_sizes) {
+          task->readBytes += i;
+        }
+      } else {
+        task->readFailure += mget_batch_size;
       }
+
     }
 
     if (opcnt % 50000000 == 0) {
@@ -389,13 +504,15 @@ static void Worker(TaskContext* task) {
     }
   }
 
-  if (user_provide_buf) {
-    free(user_provide_buf);
+  for (int i = 0; i < mget_batch_size; i++) {
+    free(keys[i]);
+    keys[i] = NULL;
   }
-  if (task->id == 0)
-  //printf("workload finished...\n");
-  printf("io thread %d finished, %ld reads, %ld writes ...\n",
-         task->id, task->readOps, task->writeOps);
+
+  if (task->id == 0) {
+    printf("io thread %d finished, %ld reads, %ld writes ...\n",
+           task->id, task->readOps, task->writeOps);
+  }
 }
 
 
@@ -405,7 +522,7 @@ void help() {
   printf("parameters: \n");
   printf("-a <ip>              : Redis server ip. Must provide.\n");
   printf("-p <port>            : Redis server port. Must provide.\n");
-  printf("-s <obj sizes>       : \",\" separated object sizes. Must provide\n");
+  printf("-s <obj sizes>       : \",\" separated object sizes. Def = 4000\n");
   printf("-n <num of objs>     : Populate this many objects before test. Def = 1000\n");
   printf("-t <num of threads>  : number of threads to run. At most 1 thread\n"
          "                       will run write worload. Def = 1\n");
@@ -417,10 +534,9 @@ void help() {
   printf("-o                   : overwrite all data at beginning. Default not.\n");
   printf("-e                   : obj expire time in seconds. Default is 0\n"
          "                       (no epire)\n");
-  printf("-u                   : Pass user-preallocated buf to KV lib to \n"
-         "                       perform zero-copy.\n");
   printf("-x                   : After loading from disk also check data integrity.\n"
          "                       Default not.\n");
+  printf("-m <num of keys>     : Perform mget of multiple keys. Default = 1 (regular get).\n");
   printf("-h                   : this message\n");
 }
 
@@ -472,14 +588,13 @@ int main(int argc, char** argv) {
   }
 
   int c;
-  vector<char*> sizeStrs;
   vector<char*> dirPaths;
   vector<char*> dirSizesInStr;
   size_t maxItemHeaderMem = 0, maxItemDataMem = 0;
   bool record_latency = false;
   size_t chunk_size = 1024 * 1024;
 
-  while ((c = getopt(argc, argv, "k:v:c:p:s:n:t:r:w:a:d:i:e:hluox")) != EOF) {
+  while ((c = getopt(argc, argv, "k:v:c:p:s:n:t:r:w:a:d:i:e:m:hlox")) != EOF) {
     switch(c) {
       case 'h':
         help();
@@ -499,9 +614,6 @@ int main(int argc, char** argv) {
         expire_time = atoi(optarg);
         printf("obj expire time = %d sec\n", expire_time);
         break;
-      case 'u':
-        use_user_provide_buf = true;
-        break;
       case 'a':
         redis_server_ip = optarg;
         printf("Redis server at: %s\n", redis_server_ip);
@@ -511,18 +623,16 @@ int main(int argc, char** argv) {
         printf("Redis server port %d\n", redis_server_port);
         break;
       case 's':
-        sizeStrs = SplitString(optarg, ",");
-        printf("will use %ld sizes\n", sizeStrs.size());
-        for (string s : sizeStrs) {
-          ioSizes.push_back(std::stoi(s));
-          printf("\t%ld", ioSizes.back());
-          assert(ioSizes.back() <= MAX_OBJ_SIZE);
-        }
-        printf("\n");
+        size_str = optarg;
+        printf("will use sizes: %s\n", size_str.c_str());
         break;
       case 'n':
         initObjNumber = std::stoi(optarg);
         printf("will populate %ld objs before test\n", initObjNumber);
+        break;
+      case 'm':
+        mget_batch_size = std::stoi(optarg);
+        printf("mget to fetch %d objs per batch\n", mget_batch_size);
         break;
       case 'i':
         runTimeSeconds = std::stoi(optarg);
@@ -550,17 +660,24 @@ int main(int argc, char** argv) {
     help();
     return 0;
   }
-  if (ioSizes.size() < 1) {
-    help();
-    return 0;
-  }
+
   if (redis_server_port <= 0 || !redis_server_ip) {
     help();
     return 0;
   }
 
-  printf("will %s use pre-allocated buf for zero-copy\n",
-         use_user_provide_buf ? "" : "NOT");
+  // Split size string into sizes.
+  vector<string> sizes = SplitString(size_str, ",");
+  printf("will use %ld sizes\n", sizes.size());
+  for (string s : sizes) {
+    ioSizes.push_back(std::stoi(s));
+    assert(ioSizes.back() <= MAX_OBJ_SIZE);
+    printf("\t%ld\n", ioSizes.back());
+  }
+  if (ioSizes.size() < 1) {
+    help();
+    return 0;
+  }
 
   int readTasks = 0, writeTasks = 0;
   if (writeTargetQPS > 0) {
@@ -602,10 +719,10 @@ int main(int argc, char** argv) {
     tasks[i].runTimeSeconds = runTimeSeconds;
 
     // Open a Redis connection.
-    tasks[i].rctx = redisConnectWithTimeout(redis_server_ip,
+    tasks[i].redis_ctx = redisConnectWithTimeout(redis_server_ip,
                                             redis_server_port,
                                             timeout);
-    assert(tasks[i].rctx != NULL);
+    assert(tasks[i].redis_ctx != NULL);
 
     // Prepare read/write targets.
     if (i < writeTasks) {
@@ -619,6 +736,7 @@ int main(int argc, char** argv) {
     }
   }
 
+  //TryRedisCmd(tasks[0].redis_ctx);
 
   procid = (uint32_t)redis_server_port;
 
@@ -640,7 +758,7 @@ int main(int argc, char** argv) {
         memset(tmpbuf, cnt, objsize);
       }
 
-      WriteObj(tasks[0].rctx, key, strlen(key), tmpbuf, objsize, expire_time);
+      WriteObj(tasks[0].redis_ctx, key, strlen(key), tmpbuf, objsize, expire_time);
     }
   } else {
     printf("===== Step 1: won't write data to init ...\n");
@@ -695,6 +813,14 @@ int main(int argc, char** argv) {
   double totalSecs = (NowInUsec() - t1) / 1000000.0;
 
   DeleteTimer(&timer);
+
+  // Close redis connections.
+  for (int i = 0; i < numTasks; i++) {
+    if (tasks[i].redis_ctx) {
+      redisFree(tasks[i].redis_ctx);
+      tasks[i].redis_ctx = NULL;
+    }
+  }
 
   printf("\nIn total:  %ld ops in %f sec (%ld read, %ld write).\n"
          "Total IOPS = %.f, read IOPS %.f, write IOPS %.f\n"

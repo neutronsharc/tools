@@ -95,6 +95,22 @@ vector<char*> SplitString(char *input, const char *delimiters) {
   return ss;
 }
 
+// Split a string into tokens, separated by delimiter.
+vector<string> SplitString(string input, const char *delimiter) {
+  vector<string> ss;
+  string token;
+  size_t pos = 0;
+  size_t begin = 0;
+
+  while ((pos = input.find(delimiter, pos)) != string::npos) {
+    token = input.substr(begin, pos - begin);
+    ss.push_back(token);
+    pos += strlen(delimiter);
+    begin = pos;
+  }
+  ss.push_back(input.substr(begin, input.size() - begin));
+  return ss;
+}
 
 
 // Convert a string in form of 123K/M/G to its decimal value.

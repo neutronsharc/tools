@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include <vector>
+#include <string>
 
 using namespace std;
 
@@ -55,6 +56,7 @@ class TaskSync {
 };
 
 vector<char*> SplitString(char *input, const char *delimiters);
+vector<string> SplitString(string input, const char *delimiter);
 
 unsigned long NowInUsec();
 
