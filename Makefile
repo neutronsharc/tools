@@ -9,13 +9,17 @@ ZK_LDFLAGS := -L/usr/local/lib -lzookeeper_mt -lpthread
 REDIS_CFLAGS := -I/usr/include/hiredis
 REDIS_LDFLAGS := -L/usr/lib/x86_64-linux-gnu/ -lhiredis
 
-CFLAGS := -g $(ZK_CFLAGS) -I/usr/include $(REDIS_CFLAGS)
-LDFLAGS := $(ZK_LDFLAGS) $(REDIS_LDFLAGS) -lrt -lpthread -lbsd
-
+CFLAGS := -g $(ZK_CFLAGS) -I/usr/include $(REDIS_CFLAGS) -I./hdr_histogram
+LDFLAGS := $(ZK_LDFLAGS) $(REDIS_LDFLAGS) -lrt -lpthread -lbsd -lm
+HdrLib = ./hdr_histogram/lib_hdr_histogram.a
 
 .PHONY : all clean
 
-all : zktest jsontest redis_test redis_bench
+all : zktest jsontest redis_test redis_bench hdr_histogram_test
+
+hdr_histogram_test : hdr_histogram_test.o
+	$(MAKE) -C ./hdr_histogram
+	$(GCC) $^ $(HdrLib) $(LDFLAGS) -o $@
 
 jsontest : json.o parson.o
 	$(GCC) $^ $(LDFLAGS) -o $@
@@ -33,4 +37,5 @@ redis_bench : redis_bench.cc utils.cc
 	$(GCC) $(CFLAGS) -c $< -o $@
 
 clean:
+	$(MAKE) -C ./hdr_histogram clean
 	$(RM) *.o $(all)
