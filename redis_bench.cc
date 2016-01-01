@@ -22,6 +22,7 @@
 #include "debug.h"
 #include "recorder.h"
 #include "utils.h"
+#include "hdr_histogram.h"
 
 using namespace std;
 
@@ -55,6 +56,11 @@ static uint32_t procid = -1;
 uint32_t expire_time = 0;
 
 static int timer_cycle_sec = 2;
+
+static pthread_mutex_t stats_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static struct hdr_histogram *histogram_read = NULL;
+static struct hdr_histogram *histogram_write = NULL;
 
 // Operation stats.
 struct OpStats {
@@ -141,7 +147,10 @@ struct TimerContext {
 };
 
 
-static void PrintStats(unsigned int *latency, int size, const char *header);
+static void PrintStats(unsigned int *latency,
+                       int size,
+                       struct hdr_histogram *histogram,
+                       const char *header);
 
 unsigned long get_random(unsigned long max_val) {
   return std::rand() % max_val;
@@ -429,6 +438,9 @@ static void Worker(TaskContext* task) {
       if (task->writeRec) {
         task->writeRec->Add(t2);
       }
+      if (histogram_write) {
+        hdr_record_value(histogram_write, t2);
+      }
       if (t2 > 30000) {
         printf("write key %s: costs %ld ms\n", key, t2 / 1000);
       }
@@ -468,6 +480,11 @@ static void Worker(TaskContext* task) {
 
       if (task->readRec) {
         task->readRec->Add(t2);
+      }
+      if (histogram_read) {
+        pthread_mutex_lock(&stats_lock);
+        hdr_record_value(histogram_read, t2);
+        pthread_mutex_unlock(&stats_lock);
       }
       if (t2 > 30000) {
         dbg("read key %s: costs %ld ms\n", key, t2 / 1000);
@@ -701,6 +718,14 @@ int main(int argc, char** argv) {
 
     writeRec.reset(new Recorder<unsigned int>(expectTotalWrites));
     memset(writeRec->Elements(), 0, sizeof(int) * expectTotalWrites);
+
+    int lowest = 1;
+    int highest = 100000000;
+    int sig_digits = 3;
+    hdr_init(lowest, highest, sig_digits, &histogram_read);
+    hdr_init(lowest, highest, sig_digits, &histogram_write);
+    printf("memory footprint of hdr-histogram: %ld\n",
+           hdr_get_memory_size(histogram_read));
   }
 
 
@@ -843,14 +868,19 @@ int main(int argc, char** argv) {
     readRec->Sort();
     writeRec->Sort();
     PrintStats(readRec->Elements(), readRec->NumberElements(),
+               histogram_read,
                "\n============== Read latency in ms");
     PrintStats(writeRec->Elements(), writeRec->NumberElements(),
+               histogram_write,
                "\n============== Write latency in ms");
   }
   return 0;
 }
 
-static void PrintStats(unsigned int *latency, int size, const char *header) {
+static void PrintStats(unsigned int *latency,
+                       int size,
+                       struct hdr_histogram *histogram,
+                       const char *header) {
   int lat_min = latency[0];
   int lat_10 = latency[(int)(size * 0.1)];
   int lat_20 = latency[(int)(size * 0.2)];
@@ -860,6 +890,16 @@ static void PrintStats(unsigned int *latency, int size, const char *header) {
   int lat_99 = latency[(int)(size * 0.99)];
   int lat_999 = latency[(int)(size * 0.999)];
   int lat_max = latency[size - 1];
+  int hist_min = (int)hdr_min(histogram);
+  int hist_max = (int)hdr_max(histogram);
+  int hist_p10 = hdr_value_at_percentile(histogram, 10);
+  int hist_p20 = hdr_value_at_percentile(histogram, 20);
+  int hist_p50 = hdr_value_at_percentile(histogram, 50);
+  int hist_p90 = hdr_value_at_percentile(histogram, 90);
+  int hist_p95 = hdr_value_at_percentile(histogram, 95);
+  int hist_p99 = hdr_value_at_percentile(histogram, 99);
+  int hist_p999 = hdr_value_at_percentile(histogram, 99.9);
+
   cout << header << endl;
   cout << setw(12) << "min"
        << setw(12) << "10 %"
@@ -879,5 +919,14 @@ static void PrintStats(unsigned int *latency, int size, const char *header) {
        << setw(12) << lat_99 / 1000.0
        << setw(12) << lat_999 / 1000.0
        << setw(12) << lat_max / 1000.0 << endl;
+  cout << setw(12) << hist_min / 1000.0
+       << setw(12) << hist_p10 / 1000.0
+       << setw(12) << hist_p20 / 1000.0
+       << setw(12) << hist_p50 / 1000.0
+       << setw(12) << hist_p90 / 1000.0
+       << setw(12) << hist_p95 / 1000.0
+       << setw(12) << hist_p99 / 1000.0
+       << setw(12) << hist_p999 / 1000.0
+       << setw(12) << hist_max / 1000.0 << endl;
 }
 

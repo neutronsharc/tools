@@ -31,7 +31,8 @@ redis_test : redis_test.o
 	$(GCC) $^ $(LDFLAGS) -o $@
 
 redis_bench : redis_bench.cc utils.cc
-	$(GXX) $^ $(CFLAGS) $(LDFLAGS) -o $@
+	$(MAKE) -C ./hdr_histogram
+	$(GXX) $^ $(HdrLib) $(CFLAGS) $(LDFLAGS) -o $@
 
 %.o : %.c
 	$(GCC) $(CFLAGS) -c $< -o $@
