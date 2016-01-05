@@ -152,6 +152,9 @@ static void PrintStats(unsigned int *latency,
                        struct hdr_histogram *histogram,
                        const char *header);
 
+static void PrintHistoStats(struct hdr_histogram *histogram,
+                            const char *header);
+
 unsigned long get_random(unsigned long max_val) {
   return std::rand() % max_val;
 }
@@ -439,6 +442,7 @@ static void Worker(TaskContext* task) {
         task->writeRec->Add(t2);
       }
       if (histogram_write) {
+        // There is only one writer, so no lock needed.
         hdr_record_value(histogram_write, t2);
       }
       if (t2 > 30000) {
@@ -547,7 +551,7 @@ void help() {
          "                       Def = 1000\n");
   printf("-w <write QPS>       : Total write target QPS. Default = 1000\n");
   printf("-i <seconds>         : Run workoad for these many seconds. Default = 10\n");
-  printf("-l                   : record per-request latency. Default false.\n");
+  //printf("-l                   : record per-request latency. Default false.\n");
   printf("-o                   : overwrite all data at beginning. Default not.\n");
   printf("-e                   : obj expire time in seconds. Default is 0\n"
          "                       (no epire)\n");
@@ -706,6 +710,14 @@ int main(int argc, char** argv) {
   dbg("will run %d read tasks, %d write tasks\n",
       readTasks, writeTasks);
 
+  int lowest = 1;
+  int highest = 100000000;
+  int sig_digits = 3;
+  hdr_init(lowest, highest, sig_digits, &histogram_read);
+  hdr_init(lowest, highest, sig_digits, &histogram_write);
+  printf("memory footprint of hdr-histogram: %ld\n",
+         hdr_get_memory_size(histogram_read));
+
   std::unique_ptr<Recorder<unsigned int>> readRec;
   std::unique_ptr<Recorder<unsigned int>> writeRec;
   if (record_latency) {
@@ -718,14 +730,6 @@ int main(int argc, char** argv) {
 
     writeRec.reset(new Recorder<unsigned int>(expectTotalWrites));
     memset(writeRec->Elements(), 0, sizeof(int) * expectTotalWrites);
-
-    int lowest = 1;
-    int highest = 100000000;
-    int sig_digits = 3;
-    hdr_init(lowest, highest, sig_digits, &histogram_read);
-    hdr_init(lowest, highest, sig_digits, &histogram_write);
-    printf("memory footprint of hdr-histogram: %ld\n",
-           hdr_get_memory_size(histogram_read));
   }
 
 
@@ -864,6 +868,9 @@ int main(int argc, char** argv) {
          readFail,
          writeFail);
 
+  PrintHistoStats(histogram_read, "\n============== Read latency in ms");
+  PrintHistoStats(histogram_write, "\n============== Write latency in ms");
+
   if (record_latency) {
     readRec->Sort();
     writeRec->Sort();
@@ -875,6 +882,39 @@ int main(int argc, char** argv) {
                "\n============== Write latency in ms");
   }
   return 0;
+}
+
+static void PrintHistoStats(struct hdr_histogram *histogram,
+                            const char *header) {
+  int hist_min = hdr_value_at_percentile(histogram, 0);
+  int hist_max = (int)hdr_max(histogram);
+  int hist_p10 = hdr_value_at_percentile(histogram, 10);
+  int hist_p20 = hdr_value_at_percentile(histogram, 20);
+  int hist_p50 = hdr_value_at_percentile(histogram, 50);
+  int hist_p90 = hdr_value_at_percentile(histogram, 90);
+  int hist_p95 = hdr_value_at_percentile(histogram, 95);
+  int hist_p99 = hdr_value_at_percentile(histogram, 99);
+  int hist_p999 = hdr_value_at_percentile(histogram, 99.9);
+
+  cout << header << endl;
+  cout << setw(12) << "min"
+       << setw(12) << "10 %"
+       << setw(12) << "20 %"
+       << setw(12) << "50 %"
+       << setw(12) << "90 %"
+       << setw(12) << "95 %"
+       << setw(12) << "99 %"
+       << setw(12) << "99.9 %"
+       << setw(12) << "max" << endl;
+  cout << setw(12) << hist_min / 1000.0
+       << setw(12) << hist_p10 / 1000.0
+       << setw(12) << hist_p20 / 1000.0
+       << setw(12) << hist_p50 / 1000.0
+       << setw(12) << hist_p90 / 1000.0
+       << setw(12) << hist_p95 / 1000.0
+       << setw(12) << hist_p99 / 1000.0
+       << setw(12) << hist_p999 / 1000.0
+       << setw(12) << hist_max / 1000.0 << endl;
 }
 
 static void PrintStats(unsigned int *latency,
