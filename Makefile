@@ -10,7 +10,7 @@ REDIS_CFLAGS := -I/usr/include/hiredis
 REDIS_LDFLAGS := -L/usr/lib/x86_64-linux-gnu/ -lhiredis
 
 CFLAGS := -g $(ZK_CFLAGS) -I/usr/include $(REDIS_CFLAGS) -I./hdr_histogram
-LDFLAGS := $(ZK_LDFLAGS) $(REDIS_LDFLAGS) -lrt -lpthread -lbsd -lm
+LDFLAGS := $(ZK_LDFLAGS) $(REDIS_LDFLAGS) -lrt -lpthread -lbsd -lm -lssl -lcrypto
 HdrLib = ./hdr_histogram/lib_hdr_histogram.a
 
 .PHONY : all clean

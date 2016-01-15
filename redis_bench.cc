@@ -13,6 +13,7 @@
 #include <iostream>
 #include <iomanip>
 #include <mutex>
+#include <openssl/sha.h>
 #include <string>
 #include <thread>
 #include <typeinfo>
@@ -29,6 +30,14 @@ using namespace std;
 #define CRASH_ON_FAILURE 0
 
 #define MAX_OBJ_SIZE (5000000)
+
+/////////////
+// Integrity check error code
+#define CHECK_OK             0
+#define ERR_KEY_LEN_MISMATCH -2
+#define ERR_KEY_MISMATCH     -3
+#define ERR_BUF_LEN_MISMATCH -4
+#define ERR_SHA1_MISMATCH    -5
 
 // Benchmark configs.
 int numTasks = 1;
@@ -214,6 +223,74 @@ static void ThrottleForQPS(long targetQPS,
   }
 }
 
+// Encode given buffer with predefined format.
+//
+// After encoding, the buffer will be:
+//
+//   (header)
+//     SHA1 of the rest of buffer (20 bytes)
+//     int buf_len  :  total size of the buf (4 bytes)
+//     int key_len  :  key length (4 bytes)
+//     char key[]   :  key (keylen bytes)
+//   (data)
+//     char data[]  :  random data (buflen - 20 - 4 - 4 - keylen)
+//
+static void EncodeBuffer(char *buf, int buflen, char *key, int keylen) {
+  int md_len = SHA_DIGEST_LENGTH;   // 20 bytes
+  int hdr_size = md_len + sizeof(int) + sizeof(int) + keylen;
+  assert(buflen > hdr_size);
+
+  char *pt = buf + md_len;
+  memcpy(pt, &buflen, sizeof(int));
+
+  pt += sizeof(int);
+  memcpy(pt, &keylen, sizeof(int));
+
+  pt += sizeof(int);
+  memcpy(pt, key, keylen);
+
+  // Now compute sha-1 of the whole buf (excluding the leading md area)
+  unsigned char hash[md_len];
+  pt = buf + md_len;
+
+  SHA1((const unsigned char*)pt, buflen - md_len, hash);
+  memcpy(buf, hash, md_len);
+}
+
+// Check data integrity of the buf, which is encoded with
+// EncodeBuffer().
+//
+// Return: integrity check error code.
+//    0: success
+//    < 0: error
+static int CheckBuffer(char *buf, int buflen, char *key, int keylen) {
+  int md_len = SHA_DIGEST_LENGTH;
+  unsigned char hash[md_len];
+
+  char *pt = buf + md_len;
+  SHA1((const unsigned char*)pt, buflen - md_len, hash);
+
+  if (memcmp(hash, buf, md_len) != 0) {
+    return ERR_SHA1_MISMATCH;
+  }
+
+  if (*(int*)pt != buflen) {
+    return ERR_BUF_LEN_MISMATCH;
+  }
+
+  pt += sizeof(int);
+  if (*(int*)pt != keylen) {
+    return ERR_KEY_LEN_MISMATCH;
+  }
+
+  pt += sizeof(int);
+  if (memcmp(pt, key, keylen) != 0) {
+    return ERR_KEY_MISMATCH;
+  }
+
+  return CHECK_OK;
+}
+
 // Read (k, v) from Redis.
 //
 // Return value:
@@ -239,12 +316,9 @@ static int ReadObj(redisContext *redis_ctx,
     // Got valid return string.
     ret = reply->len;
     if (check_data) {
-      if (reply->len != expectDataSize) {
-        // length mismatch
-        ret = -2;
-      } else if (memcmp(valbuf, reply->str, reply->len) != 0) {
-        // data corrupted
-        ret = -3;
+      int check_ret = CheckBuffer(reply->str, reply->len, key, nkey);
+      if (check_ret != CHECK_OK) {
+        ret = check_ret;
       }
     }
   }
@@ -297,6 +371,7 @@ static int ReadObjs(redisContext *redis_ctx,
 
   // Parse reply.
   int ret = -1;
+  int check_ret = CHECK_OK;
   if (!reply) {
     // cmd failed.
   } else if (reply->type != REDIS_REPLY_ARRAY) {
@@ -310,16 +385,26 @@ static int ReadObjs(redisContext *redis_ctx,
         ret_sizes.push_back(0);
       } else if (reply->element[i]->type == REDIS_REPLY_STRING) {
         // Got a valid string.
-        // data = reply.element[i]->str,
-        // size = reply.element[i]->len
-        ret_sizes.push_back(reply->element[i]->len);
-        ret++;
+        // data = reply->element[i]->str,
+        // size = reply->element[i]->len
+        if (check_data) {
+          check_ret = CheckBuffer(reply->element[i]->str,
+                                reply->element[i]->len,
+                                keys[i],
+                                keys_len[i]);
+        } else {
+          check_ret = CHECK_OK;
+        }
+        if (check_ret == CHECK_OK) {
+          ret_sizes.push_back(reply->element[i]->len);
+          ret++;
+        } else {
+          ret = check_ret;
+          break;
+        }
       } else {
         // A miss.
         ret_sizes.push_back(0);
-      }
-      if (reply->element[i]) {
-        //freeReplyObject(reply->element[i]);
       }
     }
   }
@@ -402,7 +487,7 @@ static void Worker(TaskContext* task) {
   unsigned long kid, t1, t2, opcnt = 0;
   unsigned long tBeginSec = NowInSec();
   tBeginUsec = NowInUsec();
-  int objSize = 0;
+  int obj_size = 0;
   bool last_write_failed = false;
 
   vector<char*> keys;
@@ -423,19 +508,26 @@ static void Worker(TaskContext* task) {
         kid = NextObjectID();
         // key starts with proc-id.
         sprintf(key, "%d-key-%ld", procid, kid);
-        objSize = ioSizes[kid % ioSizes.size()];
+        obj_size = ioSizes[kid % ioSizes.size()];
         if (randomize_data) {
-          arc4random_buf(buf, objSize);
+          arc4random_buf(buf, obj_size);
         } else {
-          memset(buf, kid, objSize);
+          memset(buf, kid, obj_size);
         }
-
+        if (check_data) {
+          EncodeBuffer(buf, obj_size, key, strlen(key));
+        }
       } else {
         // if last write is a failure, retry write using the same key
       }
 
       t1 = NowInUsec();
-      ret = WriteObj(task->redis_ctx, key, strlen(key), buf, objSize, expire_time);
+      ret = WriteObj(task->redis_ctx,
+                     key,
+                     strlen(key),
+                     buf,
+                     obj_size,
+                     expire_time);
       t2 = NowInUsec() - t1;
 
       if (task->writeRec) {
@@ -455,7 +547,7 @@ static void Worker(TaskContext* task) {
         last_write_failed = true;
       } else {
         task->writeSuccess++;
-        task->writeBytes += objSize;
+        task->writeBytes += obj_size;
         last_write_failed = false;
       }
       opcnt++;
@@ -478,7 +570,7 @@ static void Worker(TaskContext* task) {
       //              key,
       //              strlen(key),
       //              buf,
-      //              objSize);
+      //              obj_size);
       ret = ReadObjs(task->redis_ctx, keys, keys_len, ret_sizes);
       t2 = NowInUsec() - t1;
 
@@ -787,6 +879,9 @@ int main(int argc, char** argv) {
         memset(tmpbuf, cnt, objsize);
       }
 
+      if (check_data) {
+        EncodeBuffer(tmpbuf, objsize, key, strlen(key));
+      }
       WriteObj(tasks[0].redis_ctx, key, strlen(key), tmpbuf, objsize, expire_time);
     }
   } else {
