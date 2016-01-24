@@ -1,6 +1,20 @@
 # tools
 Some useful tools and config files.
 
+# How to set up git autocompletion
+
+## On Macos
+Install Git and bash-completion: 
+```
+brew install git bash-completion
+```
+
+Add bash-completion to your .bash_profile:
+```
+if [ -f `brew --prefix`/etc/bash_completion ]; then
+    . `brew --prefix`/etc/bash_completion
+fi
+```
 
 # How to use watcher
 watcher.py helps to sync your local dir (on MacOS)  to another remote dir. This is useful
