@@ -109,3 +109,10 @@ iface eth0 inet static
 
 Then `ifconfig eth0 down/up ` to apply the changes. 
 
+## Ubuntu: add name servers and domain name search
+"/etc/resolv.conf" is a link to "/run/resolvconf/resolv.conf".  Remove this link, and create a real file "/etc/resolv.conf" with following content:
+```
+nameserver <ns ip>
+nameserver <ns ip>
+search local <domain2> <domain 3>
+```
