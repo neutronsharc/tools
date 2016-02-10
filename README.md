@@ -71,5 +71,41 @@ git submodule update --init --recursive
 ./install.py --clang-completer
 ```
 
+# How to config network (static, dynamic IP, nameservers, default gw)
 
+## Ubuntu
+Edit /etc/network/interfaces.
+
+```
+# interfaces(5) file used by ifup(8) and ifdown(8)
+auto lo
+iface lo inet loopback
+
+ // DHCP
+auto eth1
+iface eth1 inet dhcp
+
+ // static IP for 10g, rm default gw
+auto eth2
+iface eth2 inet static
+        address 192.168.0.152
+        netmask 255.255.255.0
+        broadcast 192.168.0.255
+        dns-search hcdata.local
+        post-up route del default dev eth2
+
+  // static 1g, use it as default gw
+auto eth0
+iface eth0 inet static
+        address 172.16.1.152
+        netmask 255.255.255.0
+        broadcast 172.16.1.255
+        network 172.16.1.0
+        gateway 172.16.1.1
+        dns-search hcdata.local
+        dns-nameservers 172.16.1.3 172.16.1.3
+        post-up route add default via 172.16.1.1 dev eth0
+```
+
+Then `ifconfig eth0 down/up ` to apply the changes. 
 
