@@ -114,5 +114,7 @@ Then `ifconfig eth0 down/up ` to apply the changes.
 ```
 nameserver <ns ip>
 nameserver <ns ip>
-search local <domain2> <domain 3>
+search local
+search <domain2>
+search <domain 3>
 ```
