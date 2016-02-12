@@ -118,3 +118,19 @@ search local
 search <domain2>
 search <domain 3>
 ```
+
+## CentOS: config static IP, add name servers
+
+Config IP at:  ` /etc/sysconfig/network-scripts/ifcfg-<iface name>`.
+
+Then, add dns servers to `/etc/resolv.conf`:
+```
+search <domain1>
+search local
+nameserver 172.16.1.3
+nameserver 172.16.1.4
+```
+
+Then, restart network server:
+`systemctl restart network.service`
+
