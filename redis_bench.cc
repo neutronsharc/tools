@@ -882,7 +882,16 @@ int main(int argc, char** argv) {
       if (check_data) {
         EncodeBuffer(tmpbuf, objsize, key, strlen(key));
       }
-      WriteObj(tasks[0].redis_ctx, key, strlen(key), tmpbuf, objsize, expire_time);
+      while (WriteObj(tasks[0].redis_ctx,
+                      key,
+                      strlen(key),
+                      tmpbuf,
+                      objsize,
+                      expire_time) <= 0) {
+        // Retry upon failures.
+        usleep(1000);
+      }
+
     }
   } else {
     printf("===== Step 1: won't write data to init ...\n");
