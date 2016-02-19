@@ -12,11 +12,11 @@ GB=$((1024*1024*1024))
 MB=$((1024*1024))
 
 objsize=4000
-time=2000
+time=600
 
 # number of clients to launch. Each client spawn $threads worker threads.
 instances=16
-threads=10
+threads=4
 
 # each client target read bw.
 read_bw=$((2 * $GB))
@@ -33,7 +33,7 @@ write=$(($write_bw / $objsize / $threads))
 client_data_size=$((1 * $GB))
 nobjs=$(($client_data_size / $objsize))
 
-mget=2
+mget=4
 
 for (( i = 0; i < $instances; i++ )); do
   p1=$(($proxy_port + $i))
