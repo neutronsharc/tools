@@ -548,6 +548,17 @@ static void Worker(TaskContext* task) {
       if (ret < 0 ) {
         task->writeFailure++;
         last_write_failed = true;
+
+        // reconnect to redis server.
+        redisFree(task->redis_ctx);
+        err("proc %d thread %d (redis srv %s:%d) redis failure at write, reconnect...\n",
+            procid, task->id, redis_server_ip, redis_server_port);
+        struct timeval timeout = {15, 500000}; // 15 seconds
+        task->redis_ctx = redisConnectWithTimeout(redis_server_ip,
+                                                  redis_server_port,
+                                                  timeout);
+        assert(task->redis_ctx != NULL);
+        task->reconnects++;
       } else {
         task->writeSuccess++;
         task->writeBytes += obj_size;
@@ -689,8 +700,9 @@ void TimerCallback(union sigval sv) {
     tc->stats.write_failure  += tasks[i].writeFailure;
   }
 
-  printf("In past %d seconds:  %ld reads (%ld failure, %ld miss), "
+  printf("proc %d in past %d seconds:  %ld reads (%ld failure, %ld miss), "
          "%ld writes (%ld failure), latest write # %ld\n",
+         procid,
          timer_cycle_sec,
          tc->stats.reads - last_stats.reads,
          tc->stats.read_failure - last_stats.read_failure,
@@ -896,7 +908,7 @@ int main(int argc, char** argv) {
                       objsize,
                       expire_time) <= 0) {
         // Retry upon failures.
-        usleep(1000);
+        usleep(50000);
       }
 
     }
