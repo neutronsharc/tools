@@ -129,6 +129,9 @@ struct TaskContext {
   unsigned long readHit;
   unsigned long readMiss;
 
+  // How many times we re-connect to redis due to failures.
+  uint64_t reconnects;
+
   // record operation latency in micro-sec.
   Recorder<unsigned int> *readRec;
   Recorder<unsigned int> *writeRec;
@@ -318,7 +321,7 @@ static int ReadObj(redisContext *redis_ctx,
     if (check_data) {
       int check_ret = CheckBuffer(reply->str, reply->len, key, nkey);
       if (check_ret != CHECK_OK) {
-        ret = check_ret;
+        ret = -1;
       }
     }
   }
@@ -374,7 +377,7 @@ static int ReadObjs(redisContext *redis_ctx,
   int check_ret = CHECK_OK;
   if (!reply) {
     // cmd failed.
-  } else if (reply->type != REDIS_REPLY_ARRAY) {
+  } else if (reply->type != REDIS_REPLY_ARRAY || reply->elements < 1) {
     // no data returned.
   } else {
     ret = 0;
@@ -385,13 +388,11 @@ static int ReadObjs(redisContext *redis_ctx,
         ret_sizes.push_back(0);
       } else if (reply->element[i]->type == REDIS_REPLY_STRING) {
         // Got a valid string.
-        // data = reply->element[i]->str,
-        // size = reply->element[i]->len
         if (check_data) {
           check_ret = CheckBuffer(reply->element[i]->str,
-                                reply->element[i]->len,
-                                keys[i],
-                                keys_len[i]);
+                                  reply->element[i]->len,
+                                  keys[i],
+                                  keys_len[i]);
         } else {
           check_ret = CHECK_OK;
         }
@@ -461,6 +462,8 @@ static void TryRedisCmd(redisContext* ctx) {
   keys_len.push_back(strlen(key1));
   keys.push_back(key2);
   keys_len.push_back(strlen(key2));
+  keys.push_back(key3);
+  keys_len.push_back(strlen(key3));
   ReadObjs(ctx, keys, keys_len, ret_sizes);
 
   ReadObj(ctx, key1, strlen(key1), NULL, 0);
@@ -566,11 +569,6 @@ static void Worker(TaskContext* task) {
       }
 
       t1 = NowInUsec();
-      //ret = ReadObj(task->redis_ctx,
-      //              key,
-      //              strlen(key),
-      //              buf,
-      //              obj_size);
       ret = ReadObjs(task->redis_ctx, keys, keys_len, ret_sizes);
       t2 = NowInUsec() - t1;
 
@@ -586,8 +584,6 @@ static void Worker(TaskContext* task) {
         dbg("read key %s: costs %ld ms\n", key, t2 / 1000);
       }
 
-      //task->readOps++;
-      //opcnt++;
       // Each obj counts as one read op.
       task->readOps += mget_batch_size;
       opcnt += mget_batch_size;
@@ -603,6 +599,17 @@ static void Worker(TaskContext* task) {
         }
       } else {
         task->readFailure += mget_batch_size;
+        // Redis access failure. Close connection and re-open it with a larger
+        // timeout value.
+        redisFree(task->redis_ctx);
+        err("proc %d thread %d (redis srv %s:%d) redis failure, reconnect...\n",
+            procid, task->id, redis_server_ip, redis_server_port);
+        struct timeval timeout = {15, 500000}; // 15 seconds
+        task->redis_ctx = redisConnectWithTimeout(redis_server_ip,
+                                                  redis_server_port,
+                                                  timeout);
+        assert(task->redis_ctx != NULL);
+        task->reconnects++;
       }
 
     }
@@ -829,7 +836,7 @@ int main(int argc, char** argv) {
 
   // Prepare contexts for all worker threads.
   TaskContext tasks[numTasks];
-  struct timeval timeout = {1, 500000}; // 1.5 seconds
+  struct timeval timeout = {10, 500000}; // max 10 seconds
   memset(tasks, 0, sizeof(TaskContext) * numTasks);
 
   for (int i = 0; i < numTasks; i++) {
@@ -841,8 +848,8 @@ int main(int argc, char** argv) {
 
     // Open a Redis connection.
     tasks[i].redis_ctx = redisConnectWithTimeout(redis_server_ip,
-                                            redis_server_port,
-                                            timeout);
+                                                 redis_server_port,
+                                                 timeout);
     assert(tasks[i].redis_ctx != NULL);
 
     // Prepare read/write targets.
