@@ -86,7 +86,7 @@ auto eth1
 iface eth1 inet dhcp
 
  // static IP for 10g, rm default gw
-auto eth2
+allow-hotplug eth2
 iface eth2 inet static
         address 192.168.0.152
         netmask 255.255.255.0
@@ -95,7 +95,7 @@ iface eth2 inet static
         post-up route del default dev eth2
 
   // static 1g, use it as default gw
-auto eth0
+allow-hotplug eth0
 iface eth0 inet static
         address 172.16.1.152
         netmask 255.255.255.0
