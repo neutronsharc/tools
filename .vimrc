@@ -55,7 +55,7 @@ syntax on
 set autoindent
 set cindent
 
-set tw=80
+"set tw=80
 set wrap
 
 highlight OverLength ctermbg=red ctermfg=white guibg=#592929
