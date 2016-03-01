@@ -4,22 +4,33 @@
 # Vagrantfile API/syntax version. Don't touch unless you know what you're doing!
 VAGRANTFILE_API_VERSION = "2"
 
-default_bridge = "eth0"
-
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   # All Vagrant configuration is done here. The most common configuration
   # options are documented and commented below. For a complete reference,
   # please see the online documentation at vagrantup.com.
 
   # Every Vagrant virtual environment requires a box to build off of.
-  config.vm.box = "ubuntu15"
+  config.vm.box = "trusty64"
 
-  config.ssh.username = "shawn"
+  config.vm.hostname = "iscsi1"
 
-  config.vm.provision :shell, inline: "hostnamectl set-hostname test001"
+  #host.vm.provision :shell, inline: "hostnamectl set-hostname iscsi1"
+  config.vm.provision :shell, inline: "hostnamectl set-hostname iscsi1"
 
-  # the following way to set hostname in ubuntu15 fails: hostname server is masked
-  #config.vm.hostname = "test1"
+  #config.vm.provision :shell, path: "bootstrap.sh"
+
+  #default_bridge : “eth0"
+
+  #config.vm.network :forwarded_port, guest: 80, host: 4567
+
+  config.vm.network :public_network, ip: "172.16.1.171",   bridge: "eth0"
+
+  config.vm.synced_folder "/home/hcd/vagrant/shared", "/data"
+
+  config.vm.provider :virtualbox do |vb|
+    # Use VBoxManage to customize the VM.
+    vb.customize ["modifyvm", :id, "--memory", "8000", "--cpus", "4", "--name", "iscsi1"]
+  end
 
   # The url from where the 'config.vm.box' box will be fetched if it
   # doesn't already exist on the user's system.
@@ -28,16 +39,16 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   # Create a forwarded port mapping which allows access to a specific port
   # within the machine from a port on the host machine. In the example below,
   # accessing "localhost:8080" will access port 80 on the guest machine.
-  config.vm.network :forwarded_port, guest: 80, host: 6000
+  # config.vm.network :forwarded_port, guest: 80, host: 8080
 
   # Create a private network, which allows host-only access to the machine
   # using a specific IP.
-  # config.vm.network :private_network, ip: "192.168.33.10"
+  # config.vm.network :private_network, ip: "192.168.33.f10"
 
   # Create a public network, which generally matched to bridged network.
   # Bridged networks make the machine appear as another physical device on
   # your network.
-  config.vm.network :public_network, ip: "192.168.1.200", bridge: $default_bridge
+  # config.vm.network :public_network
 
   # If true, then any SSH connections made will enable agent forwarding.
   # Default value: false
@@ -47,19 +58,19 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   # the path on the host to the actual folder. The second argument is
   # the path on the guest to mount the folder. And the optional third
   # argument is a set of non-required options.
-#config.vm.synced_folder "/host_shared", "/from_host"
+  # config.vm.synced_folder "../data", "/vagrant_data"
 
   # Provider-specific configuration so you can fine-tune various
   # backing providers for Vagrant. These expose provider-specific options.
   # Example for VirtualBox:
   #
-  config.vm.provider :virtualbox do |vb|
+  # config.vm.provider :virtualbox do |vb|
   #   # Don't boot with headless mode
   #   vb.gui = true
   #
   #   # Use VBoxManage to customize the VM. For example to change memory:
-    vb.customize ["modifyvm", :id, "--memory", "8000", "--cpus", "4", "--name", "test001"]
-  end
+  #   vb.customize ["modifyvm", :id, "--memory", "1024"]
+  # end
   #
   # View the documentation for the provider you're using for more
   # information on available options.
