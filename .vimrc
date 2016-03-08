@@ -1,3 +1,4 @@
+
 set nocompatible              " be iMproved, required
 filetype off                  " required
 
@@ -31,6 +32,7 @@ Plugin 'Valloric/YouCompleteMe'
 " All of your Plugins must be added before the following line
 call vundle#end()            " required
 filetype plugin indent on    " required
+
 " To ignore plugin indent changes, instead use:
 "filetype plugin on
 "
@@ -44,7 +46,6 @@ filetype plugin indent on    " required
 " Put your non-Plugin stuff after this line
 
 "set tabstop=4
-"set tabstop=4
 set tabstop=2 expandtab
 set nu
 set hlsearch
@@ -56,7 +57,9 @@ set autoindent
 set cindent
 
 "set tw=80
-set wrap
+"set wrap
+
+"set term=color_xterm
 
 highlight OverLength ctermbg=red ctermfg=white guibg=#592929
 "match OverLength /\%81v.\+/
@@ -89,4 +92,8 @@ endif
 
 "noremap <C-K> :ClangFormat<CR>
 "inoremap <C-K> <C-O>:ClangFormat<CR>
+
+"let g:ycm_global_ycm_extra_conf = "~/.vim/bundle/YouCompleteMe/third_party/ycmd/cpp/ycm/.ycm_extra_conf.py"
 let g:ycm_global_ycm_extra_conf = "~/.vim/.ycm_extra_conf.py"
+
+colorscheme torte
