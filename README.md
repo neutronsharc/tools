@@ -1,3 +1,9 @@
+# Java config at macos
+
+## JAVA_HOME
+At ~/.bash_profile export java_home: `export JAVA_HOME="$(/usr/libexec/java_home)"`
+
+
 # tools
 Some useful tools and config files.
 
