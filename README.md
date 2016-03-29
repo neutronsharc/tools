@@ -3,6 +3,8 @@
 ## JAVA_HOME
 At ~/.bash_profile export java_home: `export JAVA_HOME="$(/usr/libexec/java_home)"`
 
+## build a module at maven
+To build only one module with all its dependencies:  `mvn package -pl <mod name> -am`
 
 # tools
 Some useful tools and config files.
