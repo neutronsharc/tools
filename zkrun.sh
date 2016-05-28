@@ -1,7 +1,9 @@
 #!/bin/bash
 
-if [ $# -lt 2 ]; then
-  echo "Usage: $0 <my zk id> <zk dir> <zk data dir> [optional: existing zk ip:2181]"
+if [ $# -lt 3 ]; then
+  echo "Usage: $0 <my zk id> <zk dir> <zk data dir> [optional: existing zkaddr]"
+  exit
+fi
 
 
 MYID=$1
@@ -15,6 +17,8 @@ IPADDRESS=`ip -4 addr show scope global dev eth0 | grep inet | awk '{print \$2}'
 CFG=conf/zoo.cfg
 CFGDYN=conf/zoo.cfg.dynamic
 
+cd $ZKDIR
+
 # generate the static config file.
 echo "standaloneEnabled=false" > $CFG
 echo "dataDir=$ZKDATADIR" >> $CFG
@@ -24,7 +28,6 @@ echo "initLimit=5" >> $CFG
 echo "maxClientCnxns=0" >> $CFG
 echo "dynamicConfigFile=$ZKDIR/$CFGDYN" >> $CFG
 
-cd $ZKDIR
 ./bin/zkServer.sh stop
 
 ## prepare zk data dir.
@@ -56,3 +59,4 @@ else
   ./bin/zkServer.sh start
   echo "has started myself as a new zk quorum $IPADDRESS:2181"
 fi
+
