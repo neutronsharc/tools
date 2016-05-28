@@ -44,6 +44,10 @@ fi
 if [ -n "$EXISTINGZK" ]; then
   ## join an existing quorum
   str=`./bin/zkCli.sh -server $EXISTINGZK get /zookeeper/config | grep ^server`
+  if [ -z "$str" ]; then
+    echo "failed to get any zk server addr"
+    exit 10
+  fi
   echo "existing servers: $str"
   echo $str > $CFGDYN
   echo "server.$MYID=$IPADDRESS:2888:3888;2181" >> $CFGDYN
