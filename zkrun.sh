@@ -38,6 +38,7 @@ if [ ! -d $ZKDATADIR ]; then
 else
   # TODO: check if the data dir is valid. If not valid, should force initialize.
   # TODO: check dir permission??
+  echo
 fi
 
 if [ -n "$EXISTINGZK" ]; then
