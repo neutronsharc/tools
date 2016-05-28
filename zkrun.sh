@@ -33,11 +33,12 @@ echo "dynamicConfigFile=$ZKDIR/$CFGDYN" >> $CFG
 ## prepare zk data dir.
 if [ ! -d $ZKDATADIR ]; then
   mkdir $ZKDATADIR
+  echo "will initialize zk data dir $ZKDATADIR"
+  ./bin/zkServer-initialize.sh --force --myid=$MYID
 else
   # TODO: check if the data dir is valid. If not valid, should force initialize.
-  ./bin/zkServer-initialize.sh --force --myid=$MYID
+  # TODO: check dir permission??
 fi
-# TODO: check dir permission??
 
 if [ -n "$EXISTINGZK" ]; then
   ## join an existing quorum
