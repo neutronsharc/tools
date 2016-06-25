@@ -4,7 +4,7 @@
 [global]
 bs=4k
 ioengine=libaio
-iodepth=16
+iodepth=16  // num of io units to keep in flight against each file in job.
 
 size=2g    // => totoal bytes of this job. fio runs until this many bytes have been transferred, or  
            // "runtime" has passed.
