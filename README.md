@@ -24,38 +24,45 @@ if [ -f `brew --prefix`/etc/bash_completion ]; then
 fi
 ```
 
+# How to setup passwordless ssh
+(1) generate pub key at your local home .ssh
+```
+cd ~/.ssh
+ssh-keygen -t rsa
+```
+(2) copy the pub key to remote server with the username you want.
+```
+cat ./id_rsa.pub | ssh <username>@<server> 'cat >> .ssh/authorized_keys'
+```
+
+
 # How to use watcher
 watcher.py helps to sync your local dir (on MacOS)  to another remote dir. This is useful
 when you want to develop on local laptop with nice IDE, and build/debug on
 remote servers (Linux, etc).
 
+First, set up passwordless ssh (as directed in previous section).
 
-
+Second, install python, pip, and macfsevents
 ```
-First, install python, pip, and macfsevents
-
 sudo easy_install pip
 sudo pip install watchdog
 sudo pip install macfsevents
-
-"macfsevents" is optional. It's supposed to reduce cpu usage when watcher runs
+```
+(*For MacOS only*): "macfsevents" is optional. It's supposed to reduce cpu usage when watcher runs
 in background.
 
 If you get unknown errors when installing watch dog, do this:
 sudo ARCHFLAGS=-Wno-error=unused-command-line-argument-hard-error-in-future pip install watchdog
 
-
-Second, set up a background ssh connection to your server box. Run this once a 
+(*Optional*) Third, set up a background ssh connection to your server box. Run this once a 
 day at beginning of day.
 
-ssh -MNf <server>
+`ssh -MNf <server>`
 
 Finally, run watcher
-
+```
 python ./watcher.py -s [local dir] [user]@[server]:[remote dir] --exclude-git --exclude="*.jar"
-
-
-
 ```
 
 # How to use YouCompleteMe vim plugin on Ubuntu
