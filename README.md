@@ -37,16 +37,18 @@ cat ./id_rsa.pub | ssh <username>@<server> 'cat >> .ssh/authorized_keys'
 
 
 # How to use watcher
-watcher.py helps to sync your local dir (on MacOS)  to another remote dir. This is useful
-when you want to develop on local laptop with nice IDE, and build/debug on
-remote servers (Linux, etc).
+watcher.py helps to sync your local dir (on MacOS or Linux)  to a remote dir. This is useful
+when you want to develop on local laptop with IDE, and build/debug on remote servers without GUI (Linux, etc).
 
 First, set up passwordless ssh (as directed in previous section).
 
-Second, install python, pip, and macfsevents
+Second, install python, pip
 ```
 sudo easy_install pip
 sudo pip install watchdog
+```
+For MacOS add one more package:
+```
 sudo pip install macfsevents
 ```
 (*For MacOS only*): "macfsevents" is optional. It's supposed to reduce cpu usage when watcher runs
@@ -57,8 +59,8 @@ sudo ARCHFLAGS=-Wno-error=unused-command-line-argument-hard-error-in-future pip 
 
 (*Optional*) Third, set up a background ssh connection to your server box. Run this once a 
 day at beginning of day.
-
 `ssh -MNf <server>`
+
 
 Finally, run watcher
 ```
