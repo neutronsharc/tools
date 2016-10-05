@@ -34,6 +34,10 @@ ssh-keygen -t rsa
 ```
 cat ./id_rsa.pub | ssh <username>@<server> 'cat >> .ssh/authorized_keys'
 ```
+or,
+```
+ssh-copy-id <user>@<hostname>
+```
 
 
 # How to use watcher
