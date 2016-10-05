@@ -74,13 +74,11 @@ python ./watcher.py -s [local dir] [user]@[server]:[remote dir] --exclude-git --
 # How to use YouCompleteMe vim plugin on Ubuntu
 
 - Install vundle  (vim bundle), a vim plugin manager
-
-git clone https://github.com/VundleVim/Vundle.vim.git ~/.vim/bundle/Vundle.vim
-
-- config plugin:  copy .vimrc to your home dir
+```
+git clone https://github.com/VundleVim/Vundle.vim.git  ~/.vim/bundle/Vundle.vim
+```
 
 - Install plugin YCM
-
 ```
 sudo apt-get install build-essential cmake
 sudo apt-get install python-dev
@@ -89,9 +87,11 @@ cd ~/.vim/bundle
 git clone https://github.com/Valloric/YouCompleteMe.git
 cd YouCompleteMe
 git submodule update --init --recursive
-
 ./install.py --clang-completer
 ```
+
+- config plugin:  copy .vimrc at this repo to your home dir.
+
 
 # How to config network (static, dynamic IP, nameservers, default gw)
 
