@@ -88,6 +88,9 @@ git clone https://github.com/Valloric/YouCompleteMe.git
 cd YouCompleteMe
 git submodule update --init --recursive
 ./install.py --clang-completer
+
+cp third_party/ycmd/cpp/ycm/.ycm_extra_conf.py ~/.vim/
+
 ```
 
 - config plugin:  copy .vimrc at this repo to your home dir.
