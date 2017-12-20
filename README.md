@@ -94,6 +94,7 @@ cp third_party/ycmd/cpp/ycm/.ycm_extra_conf.py ~/.vim/
 ```
 
 - config plugin:  copy .vimrc at this repo to your home dir.
+- copy cscope_maps.vim to ~/.vim/plugin/
 
 
 # How to config network (static, dynamic IP, nameservers, default gw)
