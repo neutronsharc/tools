@@ -2,6 +2,12 @@
 set nocompatible              " be iMproved, required
 filetype off                  " required
 
+" F2 to toggle paste mode: in paste mode you paste external code,
+" keeping external indent.
+nnoremap <F2> :set invpaste paste?<CR>
+set pastetoggle=<F2>
+set showmode
+
 " set the runtime path to include Vundle and initialize
 set rtp+=~/.vim/bundle/Vundle.vim
 call vundle#begin()
