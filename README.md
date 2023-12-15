@@ -96,6 +96,22 @@ cp third_party/ycmd/cpp/ycm/.ycm_extra_conf.py ~/.vim/
 - config plugin:  copy .vimrc at this repo to your home dir.
 - copy cscope_maps.vim to ~/.vim/plugin/
 
+# Cscope shortcuts in Vim
+Cscope is a very powerful interface allowing you to easily navigate C-like code files. Vim provides the capability to navigate code without ever leaving the editor.
+```
+:cs help  //  cscope helper
+
+// Inside vim, move your cursor to a symbol and type ctrl + \, then:
+
+c: Find functions calling this function
+d: Find functions called by this function
+e: Find this egrep pattern
+f: Find this file
+g: Find this definition
+i: Find files #including this file
+s: Find this C symbol
+t: Find this text string
+```
 
 # How to config network (static, dynamic IP, nameservers, default gw)
 
