@@ -10,6 +10,11 @@ To build only one module with all its dependencies:  `mvn package -pl <mod name>
 Some useful tools and config files.
 
 # How to set up git autocompletion
+## On Windows
+1, install clink (download exe from here: https://chrisant996.github.io/clink/)
+2, Copy git-autocomplete.lua into C:\Users\<username>\AppData\local\clink\
+(from here: https://github.com/ztomm/git-autocomplete-for-windows/blob/main/git-autocomplete.lua)
+3, open clink app on Windows (like a replacement for powershell)
 
 ## On Macos
 Install Git and bash-completion: 
