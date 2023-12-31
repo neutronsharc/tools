@@ -1,3 +1,14 @@
+# Ubuntu laptop:  change the behaviors when lid is closed
+## config systemd-logind
+Edit "/etc/systemd/logind.conf",  change "HandleLidSwitch".
+- HandleLidSwitch=poweroff: shutdown / power off when lid is closed.
+- HandleLidSwitch=hibernate: hibernate when lid is closed (need to test if hibernate works).
+- HandleLidSwitch=ignore: do nothing.
+- HandleLidSwitch=suspend: suspend laptop when lid is closed.
+
+## install tweaks
+- sudo apt-get install gnome-tweak-tool,  then run "tweaks"  => power => change the value at "suspend when laptop lid is closed"
+
 # Java config at macos
 
 ## JAVA_HOME
