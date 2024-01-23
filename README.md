@@ -1,3 +1,11 @@
+# Perf a process
+
+1, git clone https://github.com/brendangregg/FlameGraph
+2, edit the "flamechart.sh" to point to the tool dir.
+3, run "./flamechart.sh  thread-id  <output filename>"
+4, Use firefox to view the generated *.svg file.
+
+
 # Ubuntu laptop:  change the behaviors when lid is closed
 ## config systemd-logind
 Edit "/etc/systemd/logind.conf",  change "HandleLidSwitch".
