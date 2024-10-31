@@ -1,5 +1,10 @@
-# Perf a process
+# ASAN debug
+## generate a coredump when asan trips.
+export ASAN_OPTIONS=abort_on_error=1
+ulimit -c unlimited
+<your binary>
 
+# Perf a process
 - git clone https://github.com/brendangregg/FlameGraph
 - edit the "flamechart.sh" to point to the tool dir.
 - run "./flamechart.sh  thread-id  <output filename>"
