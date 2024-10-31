@@ -2,7 +2,7 @@
 ## generate a coredump when asan trips.
 - export ASAN_OPTIONS=abort_on_error=1
 - ulimit -c unlimited
-- <your binary>
+-  run your binary
 
 # Perf a process
 - git clone https://github.com/brendangregg/FlameGraph
